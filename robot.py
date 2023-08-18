@@ -9,7 +9,7 @@ from picozero import pico_temp_sensor, pico_led
 import machine
 
 ssid = 'IpHoster'
-password = 'password'
+password = ''
 
 def connect():
     #Connect to WLAN
@@ -25,7 +25,7 @@ def connect():
 
 def open_socket(ip):
     # Open a socket
-    address = (ip, 80)
+    address = (ip, 6000)
     connection = socket.socket()
     connection.bind(address)
     connection.listen(1)
@@ -34,53 +34,52 @@ def open_socket(ip):
 
 def serve(connection):
     #Start a web server
-    state = 'OFF'
+    state = False
     pico_led.off()
-    temperature = 0
+    brightness = 50
     while True:
         client = connection.accept()[0]
         request = client.recv(1024)
-        request = str(request)
-        print(request)
-        try:
-            request = request.split()[1]
-        except IndexError:
-            pass
-        if request == '/lighton?':
+        stringdata = request.decode('utf-8')
+        print('Message: {}, {}'.format(stringdata, len(stringdata)))
+        if 'on' in stringdata:
             pico_led.on()
-            state = 'ON'
+            state = True
             buggy.beepHorn()
-            buggy.motorOn("l","f",100)
-            buggy.motorOn("r","f",100)
-            sleep(0.5)
-        elif request =='/lightoff?':
+            buggy.setLED(0, buggy.RED)
+            buggy.setLED(1, buggy.GREEN)
+            buggy.setLED(2, buggy.BLUE)
+            buggy.setLED(3, buggy.PURPLE)
+            buggy.setBrightness(brightness)
+            buggy.show()
+            client.send('Understood')
+        elif 'off' in stringdata:
             pico_led.off()
+            buggy.beepHorn()
+            sleep(3)
+            buggy.setLED(0, buggy.RED)
+            buggy.setLED(1, buggy.GREEN)
+            buggy.setLED(2, buggy.BLUE)
+            buggy.setLED(3, buggy.PURPLE)
+            buggy.setBrightness(0)
+            buggy.show()
+            state = False
+            client.send('Understood')
+        elif 'forward' in stringdata and state:
+            buggy.motorOn("l","f",30)
+            buggy.motorOn("r","f",30)
+            sleep(1)
             buggy.motorOff("r")
             buggy.motorOff("l")
-            sleep(0.5)
-            state = 'OFF'
-        temperature = pico_temp_sensor.temp
-        html = webpage(temperature, state)
-        client.send(html)
+        elif 'backward' in stringdata and state:
+            buggy.motorOn("l","r",30)
+            buggy.motorOn("r","r",30)
+            sleep(1)
+            buggy.motorOff("r")
+            buggy.motorOff("l")
+        else:
+            client.send('Could not understand the message')
         client.close()
-
-def webpage(temperature, state):
-    #Template HTML
-    html = f"""
-            <!DOCTYPE html>
-            <html>
-            <form action="./lighton">
-            <input type="submit" value="Motors on" />
-            </form>
-            <form action="./lightoff">
-            <input type="submit" value="Motors off" />
-            </form>
-            <p>Motor Status: {state}</p>
-            <p>Temperature is {temperature}</p>
-            </body>
-            </html>
-            """
-    return str(html)
 
 buggy = KitronikPicoRobotBuggy()
 try:
